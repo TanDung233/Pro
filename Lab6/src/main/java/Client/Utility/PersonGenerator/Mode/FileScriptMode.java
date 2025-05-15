@@ -1,0 +1,192 @@
+package Client.Utility.PersonGenerator.Mode;
+
+import Common.Data.Person;
+import Common.Network.Request;
+import Common.Network.Response;
+import Server.Commands.*;
+import Server.Manager.CollectionManager;
+import Server.Manager.CommandManager;
+import Server.Utility.ConsolePrinter;
+import Client.Utility.PersonGenerator.Creator.PersonBuilder;
+import Client.Utility.PersonGenerator.Creator.PersonCreator;
+
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.util.*;
+
+public class FileScriptMode implements IMode {
+    private final String scriptPath;
+    private final CollectionManager collectionManager;
+    private final PersonBuilder personBuilder;
+    private final PersonCreator personCreator;
+
+
+    private Scanner scriptScanner;
+    private final List<String> executedScripts = new ArrayList<>();
+    private boolean executionEnabled = true;
+    private int executionCount = 1;
+    private int maxExecutions = 1;
+    ConsolePrinter consolePrinter = new ConsolePrinter();
+
+    public FileScriptMode(String scriptPath, CollectionManager collectionManager) {
+        this.scriptPath = scriptPath;
+        this.collectionManager = collectionManager;
+        this.personBuilder = new PersonBuilder(new Scanner(System.in));
+        this.personCreator = new PersonCreator(personBuilder);
+    }
+
+    @Override
+    public String executeMode() {
+        StringBuilder output = new StringBuilder();
+        if (executedScripts.contains(scriptPath)) {
+            return ("Recursive script detected: " + scriptPath);
+        }
+
+        executedScripts.add(scriptPath);
+        Scanner originalScanner = personBuilder.getUserScanner();
+
+        try {
+            initializeScriptScanner();
+            personBuilder.setUserScanner(scriptScanner);
+            personBuilder.setFileMode();
+
+            while (executionEnabled && scriptScanner.hasNextLine()) {
+                String commandLine = getNextCommandLine();
+                if (!commandLine.trim().isEmpty()) {
+                    output.append("> ").append(commandLine).append("\n");
+                    try {
+                        Response response = processCommandLine(commandLine);
+                        output.append(response.getMessage()).append("\n");
+                    } catch (Exception e) {
+                        output.append("Error: ").append(e.getMessage()).append("\n\n");
+                    }                }
+            }
+        } catch (FileNotFoundException e) {
+            consolePrinter.printError("Script file not found: " + scriptPath);
+        } catch (NoSuchElementException e) {
+            consolePrinter.printError("Script file is empty: " + scriptPath);
+
+        } finally {
+            personBuilder.setUserScanner(originalScanner);
+            personBuilder.setUserMode();
+            executedScripts.remove(scriptPath);
+        }
+        return output.toString();
+    }
+
+    private void initializeScriptScanner() throws FileNotFoundException {
+        scriptScanner = new Scanner(new File(scriptPath));
+        if (!scriptScanner.hasNextLine()) {
+            throw new NoSuchElementException();
+        }
+    }
+
+    private String getNextCommandLine() {
+        String line = scriptScanner.nextLine().trim();
+        consolePrinter.printInformation("> " + line);
+        return line;
+    }
+
+    private Response processCommandLine(String commandLine) {
+        String[] parts = commandLine.split("\\s+", 2);
+        String commandName = parts[0];
+        String arguments = parts.length > 1 ? parts[1] : "";
+        switch (commandName) {
+            case "add":
+                Person personToAdd = personCreator.createPerson();
+                Request request = new Request(commandName, personToAdd);
+                return new  AddCommand(collectionManager).execute(request);
+
+            case "update":
+                Integer idToUpdate;
+                idToUpdate = Integer.parseInt(arguments);
+                consolePrinter.printInformation("** Updating the person... **");
+                Person updatedPerson = personCreator.createPerson();
+                Request request1 = new Request(commandName, idToUpdate, updatedPerson);
+                return new  UpdateCommand(collectionManager).execute(request1);
+
+            case "add_if_max":
+                Person personToAddMax = personCreator.createPerson();
+                Request request2 = new Request(commandName, personToAddMax);
+                return new  AddIfMaxCommand(collectionManager).execute(request2);
+
+            case "add_if_min":
+                Person personToAddMin = personCreator.createPerson();
+                Request request3 = new Request(commandName, personToAddMin);
+                return new  AddIfMinCommand(collectionManager).execute(request3);
+
+            case "average_of_height":
+                return new AverageCommand(collectionManager).execute(new Request(commandName));
+
+            case "clear":
+                return new ClearCommand(collectionManager).execute(new Request(commandName));
+
+            case "exit":
+                return new ExitCommand().execute(new Request(commandName));
+
+            case "help":
+                return new HelpCommand(new CommandManager(collectionManager)).execute(new Request(commandName));
+
+            case "history":
+                return new HistoryCommand(collectionManager).execute(new Request(commandName));
+
+            case "info":
+                return new InfoCommand(collectionManager).execute(new Request(commandName));
+
+            case "print_descending":
+                return new PrintdescendingCommand(collectionManager).execute(new Request(commandName));
+
+            case "show":
+                return new ShowCommand(collectionManager).execute(new Request(commandName));
+
+            case "sum":
+                return new SumCommand(collectionManager).execute(new Request(commandName));
+
+            case "remove_by_id":
+                Integer idToRemove;
+                idToRemove = Integer.parseInt(arguments);
+                Request request4 = new Request(commandName, idToRemove);
+                return new  RemoveByIdCommand(collectionManager).execute(request4);
+
+            case "execute_script":
+                handleNestedScript(arguments);
+
+            default:
+                return new Response("Unknown command: " + commandName);
+        }
+    }
+
+    private void handleNestedScript(String nestedScriptPath) {
+        if (executedScripts.contains(nestedScriptPath)) {
+            consolePrinter.printError("Recursive script prevented: " + nestedScriptPath);
+            return;
+        }
+
+        if (executionCount >= maxExecutions) {
+            consolePrinter.printError("Maximum execution count reached for script: " + nestedScriptPath);
+            return;
+        }
+
+        consolePrinter.printResult("Executing nested script: " + nestedScriptPath);
+        FileScriptMode nestedScript = new FileScriptMode(
+                nestedScriptPath,
+                collectionManager);
+
+        nestedScript.setMaxExecutions(this.maxExecutions);
+        nestedScript.setExecutionCount(this.executionCount + 1);
+        nestedScript.executeMode();
+    }
+
+    private void setMaxExecutions(int max) {
+        this.maxExecutions = max;
+    }
+
+    private void setExecutionCount(int count) {
+        this.executionCount = count;
+    }
+
+    @Override
+    public Scanner getScanner() {
+        return scriptScanner;
+    }
+}
