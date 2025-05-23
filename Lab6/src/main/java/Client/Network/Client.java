@@ -3,7 +3,6 @@ import Common.Network.Request;
 import Common.Network.Response;
 import Server.Utility.ConsolePrinter;
 import org.apache.commons.lang.SerializationUtils;
-import org.checkerframework.checker.units.qual.C;
 
 import java.io.IOException;
 import java.net.*;
@@ -48,11 +47,6 @@ public class Client {
         Response response = (Response) SerializationUtils.deserialize(responseBytes);
 
         logger.log(Level.INFO, "Response from server: ");
-        try {
-            Thread.sleep(500);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
         consolePrinter.printResult(response.getMessage());
         return response;
     }

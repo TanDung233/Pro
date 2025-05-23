@@ -17,10 +17,11 @@ public class CliSender {
     private final DatagramChannel dc;
     private final SocketAddress serverAddr;
 
-    public CliSender(int PACKET_SIZE, DatagramChannel dc, Logger logger, SocketAddress addr) {
+    public CliSender(int PACKET_SIZE, DatagramChannel dc, Logger logger, SocketAddress addr) throws IOException {
         this.DATA_SIZE = PACKET_SIZE - 1;
         this.logger = logger;
         this.dc = dc;
+        dc.configureBlocking(false);
         this.serverAddr = addr;
     }
 
