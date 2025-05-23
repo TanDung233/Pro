@@ -19,17 +19,15 @@ public class Server {
     private SocketAddress clientAddr;
     private SvSender svSender;
     private SvReceiver svReceiver;
-    private DatagramChannel dc;
-
+    private DatagramSocket ds;
 
     public Server(InetAddress hostAddr, int port, Logger log) throws IOException {
         this.serverAddr = new InetSocketAddress(hostAddr, port);
         this.clientAddr = null;
-        this.dc = DatagramChannel.open().bind(serverAddr);
         this.logger = log;
-        this.svReceiver = new SvReceiver(PACKET_SIZE, dc, logger);
+        this.ds = new DatagramSocket(port,hostAddr);
+        this.svReceiver = new SvReceiver(PACKET_SIZE, ds, logger);
     }
-
 
     /**
      * Server connects to client
@@ -37,38 +35,24 @@ public class Server {
      * @return client address
      */
     public SocketAddress connectToClient() {
-        try {
-            dc.connect(clientAddr);
-            this.svSender = new SvSender(PACKET_SIZE, dc, logger, clientAddr);
-            return clientAddr;
-        } catch (IOException e) {
-            logger.log(Level.SEVERE, "Connection failed!");
-        }
-        return null;
-
+        this.svSender = new SvSender(PACKET_SIZE, ds, logger, clientAddr);
+        return clientAddr;
     }
 
     /**
      * Server disconnects from client
      */
     public void disconnectFromClient() {
-        try {
-            dc.disconnect();
-        } catch (IOException e) {
-            logger.log(Level.SEVERE, e.toString());
-        }
+        ds.disconnect();
     }
 
     /**
      * Server clears data socket
      */
     public void clearSocket() {
-        try {
-            dc.close();
-        } catch (IOException e) {
-            logger.log(Level.SEVERE, e.toString());
-        }
+        ds.close();
     }
+
 
     /**
      * Server receives data from client
@@ -78,6 +62,7 @@ public class Server {
     public byte[] receiveData() {
         byte[] data = svReceiver.receiveData();
         this.clientAddr = svReceiver.getClientAddr();
+        this.svSender = new SvSender(PACKET_SIZE, ds, logger, clientAddr);
         return data;
     }
 
@@ -117,6 +102,6 @@ public class Server {
      * @return if server is connected
      */
     public boolean serverIsConnecting() {
-        return dc.isConnected();
+        return ds.isConnected();
     }
 }
