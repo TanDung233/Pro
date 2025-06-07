@@ -137,38 +137,11 @@ public class CollectionManager {
         }
     }
 
-    public void updateElement(Person newPerson, Integer ID) {
-        lock.lock();
-        try {
-            Person personToUpdate = getPersonByID(ID);
-            if (personToUpdate != null) {
-                personTreeSet.remove(personToUpdate);
-                personToUpdate.setName(newPerson.getName());
-                personToUpdate.setCoordinates(newPerson.getCoordinates());
-                personToUpdate.setHeight(newPerson.getHeight());
-                personToUpdate.setBirthday(newPerson.getBirthday());
-                personToUpdate.setEyeColor(newPerson.getEyeColor());
-                personToUpdate.setHairColor(newPerson.getHairColor());
-                personToUpdate.setLocation(newPerson.getLocation());
-                personTreeSet.add(personToUpdate);
-            }        } finally {
-            lock.unlock();
-        }
-    }
 
     public void removeFromCollection(Person person){
         personTreeSet.remove(person.getId());
     }
 
-
-    public void clearCollection() {
-        lock.lock();
-        try {
-            personTreeSet.clear();
-        } finally {
-            lock.unlock();
-        }
-    }
 
     public void removeElement(Integer ID) {
         lock.lock();
@@ -211,7 +184,8 @@ public class CollectionManager {
                 sum += person.getHeight();
             }
             double average = (double) sum / personTreeSet.size();
-            return ("Average height for all elements in the collection: " + average);        } finally {
+            return ("Average height for all elements in the collection: " + average);
+        } finally {
             lock.unlock();
         }
     }
@@ -225,7 +199,8 @@ public class CollectionManager {
 
             return personTreeSet.descendingSet().stream()
                     .map(Person::toString)
-                    .collect(Collectors.joining("\n"));        } finally {
+                    .collect(Collectors.joining("\n"));
+        } finally {
             lock.unlock();
         }
     }
@@ -238,21 +213,4 @@ public class CollectionManager {
 
     }
 
-    public int idmax() {
-        lock.lock();
-        try {
-            if (personTreeSet.isEmpty()) {
-                return 1;
-            }
-            Person maxPerson = personTreeSet.first();
-            for (Person person : personTreeSet) {
-                if (person.getId() > maxPerson.getId()) {
-                    maxPerson = person;
-                }
-            }
-            return maxPerson.getId();
-        } finally {
-            lock.unlock();
-        }
-    }
 }

@@ -11,12 +11,6 @@ public interface DML {
     String SELECT_PERSON_BY_ID = SELECT_ALL_PERSON + " WHERE " +
             COLUMNS.ID + " = ?";
 
-    String SELECT_COORDINATES_ID_BY_PERSON_ID = "SELECT " + COLUMNS.COORDINATES_ID
-            + " FROM " + TABLES.PERSON + " WHERE " + COLUMNS.ID + " = ?";
-
-    String SELECT_LOCATION_ID_BY_PERSON_ID = "SELECT " + COLUMNS.LOCATION_ID
-            + " FROM " + TABLES.PERSON + " WHERE " + COLUMNS.ID + " = ?";
-
     String INSERT_PERSON = "INSERT INTO " + TABLES.PERSON + " (" +
             COLUMNS.NAME + ", " +
             COLUMNS.COORDINATES_ID + ", " +

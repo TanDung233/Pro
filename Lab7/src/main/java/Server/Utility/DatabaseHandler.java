@@ -1,8 +1,12 @@
 package Server.Utility;
 
 import Server.ServerApp;
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 
 import java.sql.*;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 
 /**
@@ -10,135 +14,124 @@ import java.util.logging.Level;
  */
 public class DatabaseHandler {
 
-    private final String JDBC_DRIVER = "org.postgresql.Driver";
+    private final HikariDataSource dataSource;
+    private final Map<PreparedStatement, Connection> stmConnMap = new ConcurrentHashMap<>();
+    private final ThreadLocal<Connection> txConn = new ThreadLocal<>();
 
-    private String url;
-    private String userName;
-    private String password;
-    private Connection connection;
 
-    public DatabaseHandler(String url, String userName, String password) {
-        this.url = url;
-        this.userName = userName;
-        this.password = password;
-        connectToDataBase();
+    public DatabaseHandler(String url, String user, String pass) {
+        HikariConfig cfg = new HikariConfig();
+        cfg.setJdbcUrl(url);
+        cfg.setUsername(user);
+        cfg.setPassword(pass);
+        cfg.setMaximumPoolSize(16);
+        cfg.setMinimumIdle(4);
+        cfg.setIdleTimeout(30_000);
+        cfg.setConnectionTimeout(10_000);
+        dataSource = new HikariDataSource(cfg);
+        ServerApp.logger.info("HikariCP pool started");
     }
 
-    /**
-     * A method for connect to database.
-     */
-    private void connectToDataBase(){
-        try {
-            Class.forName(JDBC_DRIVER);
-            connection = DriverManager.getConnection(url, userName, password);
-            ServerApp.logger.log(Level.INFO, "Connect to DB successfully!");
-        } catch (ClassNotFoundException e) {
-            ServerApp.logger.log(Level.WARNING, "The database management driver was not found!");
-        } catch (SQLException e) {
-            ServerApp.logger.log(Level.WARNING, "An error occurred while connecting to the database!");
-        }
-    }
-
-    /**
-     * A method for disconnect to database.
-     */
-    public void disconnectToDataBase(){
-        if (connection == null) return;
-        try{
-            connection.close();
-            ServerApp.logger.log(Level.INFO, "Disconnect to DB successfully!");
-        } catch (SQLException e) {
-            ServerApp.logger.log(Level.WARNING, "An error occurred while disconnecting to the database!");
-        }
-    }
 
     /**
      * @param sqlStatement SQL statement to be prepared.
      * @param generateKeys Is keys needed to be generated.
      * @return Prepared statement.
      */
-    public PreparedStatement getPreparedStatement(String sqlStatement, boolean generateKeys){
-        PreparedStatement preparedStatement;
-        try{
-            if (connection == null) throw new SQLException();
-            int autoGenerateKeys = generateKeys ? Statement.RETURN_GENERATED_KEYS : Statement.NO_GENERATED_KEYS;
-            preparedStatement = connection.prepareStatement(sqlStatement, autoGenerateKeys);
-            return preparedStatement;
+    public PreparedStatement getPreparedStatement(String sqlStatement,
+                                                  boolean generateKeys) {
+        try {
+            int flag = generateKeys
+                    ? Statement.RETURN_GENERATED_KEYS
+                    : Statement.NO_GENERATED_KEYS;
+            Connection conn = dataSource.getConnection();
+            PreparedStatement ps = conn.prepareStatement(sqlStatement, flag);
+            stmConnMap.put(ps, conn);
+            return ps;
+
         } catch (SQLException e) {
-            ServerApp.logger.log(Level.WARNING, "An error occurred while connecting to the database!");
-        }
-        return null;
-    }
-
-    /**
-     * Close prepared statement
-     * @param sqlStatement SQL statement to be closed.
-     */
-    public void closePreparedStatement(PreparedStatement sqlStatement){
-        if (sqlStatement == null) return;
-        try{
-            sqlStatement.close();
-        } catch (SQLException e){
+            ServerApp.logger.log(Level.WARNING,
+                    "Can't create PreparedStatement", e);
+            return null;
         }
     }
 
-    /**
-     * Set commit mode of database.
-     */
-    public void setCommitMode(){
-        try{
-            if (connection == null) throw new SQLException();
-            connection.setAutoCommit(false);
+
+    public void closePreparedStatement(PreparedStatement ps) {
+        if (ps == null) return;
+        try { ps.close(); } catch (SQLException ignored) {}
+        Connection conn = stmConnMap.remove(ps);
+        if (conn != null) try { conn.close(); } catch (SQLException ignored) {}
+    }
+
+    public void closePool() {
+        dataSource.close();
+        ServerApp.logger.info("HikariCP pool closed");
+    }
+    public void setCommitMode() {
+        try {
+            if (txConn.get() == null) {
+                Connection conn = dataSource.getConnection();
+                conn.setAutoCommit(false);
+                txConn.set(conn);
+            }
         } catch (SQLException e) {
-            ServerApp.logger.log(Level.WARNING, "An error occurred while setting the database transaction mode!");
+            ServerApp.logger.log(Level.WARNING,
+                    "Error when enabling commit mode", e);
         }
     }
 
-    /**
-     * Set normal mode of database.
-     */
     public void setNormalMode() {
+        Connection conn = txConn.get();
+        if (conn == null) return;
         try {
-            if (connection == null) throw new SQLException();
-            connection.setAutoCommit(true);
-        } catch (SQLException exception) {
-            ServerApp.logger.log(Level.WARNING, "An error occurred while setting the normal database mode!");
+            conn.setAutoCommit(true);
+        } catch (SQLException e) {
+            ServerApp.logger.log(Level.WARNING,
+                    "Error when re-enabling auto-commit", e);
         }
     }
 
-    /**
-     * Commit database status.
-     */
     public void commit() {
+        Connection conn = txConn.get();
+        if (conn == null) return;
         try {
-            if (connection == null) throw new SQLException();
-            connection.commit();
-        } catch (SQLException exception) {
-            ServerApp.logger.log(Level.WARNING, "An error occurred while confirming the new state of the database!");
+            conn.commit();
+        } catch (SQLException e) {
+            ServerApp.logger.log(Level.WARNING,
+                    "Error when commit", e);
+        } finally {
+            closeSilently(conn);
+            txConn.remove();
         }
     }
 
-    /**
-     * Roll back database status.
-     */
     public void rollback() {
+        Connection conn = txConn.get();
+        if (conn == null) return;
         try {
-            if (connection == null) throw new SQLException();
-            connection.rollback();
-        } catch (SQLException exception) {
-            ServerApp.logger.log(Level.WARNING, "An error occurred while returning the initial state of the database!");
+            conn.rollback();
+        } catch (SQLException e) {
+            ServerApp.logger.log(Level.WARNING,
+                    "Error when rollback", e);
+        } finally {
+            closeSilently(conn);
+            txConn.remove();
         }
     }
 
-    /**
-     * Set save point of database.
-     */
     public void setSavepoint() {
+        Connection conn = txConn.get();
+        if (conn == null) return;
         try {
-            if (connection == null) throw new SQLException();
-            connection.setSavepoint();
-        } catch (SQLException exception) {
-            ServerApp.logger.log(Level.WARNING, "An error occurred while saving the database state!");
+            conn.setSavepoint();
+        } catch (SQLException e) {
+            ServerApp.logger.log(Level.WARNING,
+                    "Error when set savepoint", e);
         }
+    }
+
+    private void closeSilently(Connection c) {
+        try { c.close(); } catch (SQLException ignored) {}
     }
 }

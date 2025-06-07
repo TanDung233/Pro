@@ -8,12 +8,22 @@
     <artifactId>Lab_6</artifactId>
     <version>1.0-SNAPSHOT</version>
     <name>Lab 6</name>
-
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <junit.version>5.9.2</junit.version>  </properties>
-
     <dependencies>
+        <dependency><groupId>org.slf4j</groupId><artifactId>slf4j-simple</artifactId><version>2.0.12</version></dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <version>42.7.3</version>
+        </dependency>
+        <dependency>
+            <groupId>com.zaxxer</groupId>
+            <artifactId>HikariCP</artifactId>
+            <version>5.1.0</version>
+        </dependency>
+
         <dependency>
             <groupId>org.openjfx</groupId>
             <artifactId>javafx-controls</artifactId>

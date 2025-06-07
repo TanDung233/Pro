@@ -16,13 +16,15 @@ import java.util.logging.Logger;
 public class ServerApp {
     public static Logger logger = Logger.getLogger("ServerLogger");
     private static int port = 2345;
-    //private static String databaseUsername = "postgres";
-    private static String databaseUsername = "s463227";
-    private static String databaseHost = "pg";
-    //private static String databasePassword = "230304";
-    private static String databasePassword = "CAIgpjcssdDf2AoC";
+    private static String databaseUsername = "postgres";
+    //private static String databaseUsername = "s463227";
+    //private static String databaseHost = "pg";
 
-    private static String databaseAddress = "jdbc:postgresql://pg:5432/studs";
+    private static String databasePassword = "230304";
+    //private static String databasePassword = "CAIgpjcssdDf2AoC";
+    //private static String databaseAddress = "jdbc:postgresql://pg:5432/studs";
+    private static String databaseAddress = "jdbc:postgresql://localhost:5432/postgres";
+
 
     public static void main(String[] args){
         try{
@@ -31,7 +33,7 @@ public class ServerApp {
             DatabaseCollectionManager databaseCollectionManager = new DatabaseCollectionManager(databaseUserManager, databaseHandler);
             CollectionManager collectionManager = new CollectionManager(databaseCollectionManager);
 
-            ServerAppRunner app = new ServerAppRunner(collectionManager, port, databaseUserManager, databaseCollectionManager);
+            ServerAppRunner app = new ServerAppRunner(collectionManager, port, databaseUserManager, databaseCollectionManager,databaseHandler);
             app.run();
         } catch (IOException e) {
             ServerApp.logger.log(Level.WARNING, e.toString());

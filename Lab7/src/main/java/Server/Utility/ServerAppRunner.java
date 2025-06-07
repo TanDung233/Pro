@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 
@@ -20,54 +21,59 @@ import java.util.logging.Level;
  */
 public class ServerAppRunner implements Runnable{
     private final CommandManager commandManager;
-    private final DatabaseUserManager databaseUserManager;
-    private final DatabaseCollectionManager databaseCollectionManager;
     private final CollectionManager collectionManager;
     private Server server;
     private boolean serverIsRunning = true;
-    private ExecutorService fixedThreadPool = Executors.newFixedThreadPool(2);
+    private final ExecutorService readPool     = Executors.newFixedThreadPool(32);
+    private final ExecutorService processPool  = Executors.newCachedThreadPool();
+    private final ForkJoinPool sendPool     = new ForkJoinPool();
+    private final DatabaseHandler databaseHandler;
+    private final ExecutorService connectionPool = Executors.newCachedThreadPool();
 
 
 
-    public ServerAppRunner(CollectionManager collectionManager, int port, DatabaseUserManager databaseUserManager, DatabaseCollectionManager databaseCollectionManager) throws IOException {
+    public ServerAppRunner(CollectionManager collectionManager,
+                           int port, DatabaseUserManager databaseUserManager,
+                           DatabaseCollectionManager databaseCollectionManager,
+                           DatabaseHandler databaseHandler) throws IOException {
         this.collectionManager = collectionManager;
-        this.databaseUserManager = databaseUserManager;
-        this.databaseCollectionManager = databaseCollectionManager;
         this.commandManager = new CommandManager(collectionManager, databaseUserManager, databaseCollectionManager);
         this.server =  new Server(InetAddress.getLocalHost(), port);
+        this.databaseHandler = databaseHandler;
     }
 
-    /**
-     * Run the program
-     */
     @Override
     public void run() {
-        ServerApp.logger.log(Level.INFO, "Server is waiting to connect...");
+        ServerApp.logger.info("Server is waiting to receive datagrams...");
+
+        connectionPool.submit(new ConnectionHandler(
+                server, commandManager, readPool, processPool, sendPool,this));
+
         while (serverIsRunning) {
-            fixedThreadPool.submit(new ConnectionHandler(server, commandManager));
-            server.disconnectFromClient();
+            try { Thread.sleep(1000); } catch (InterruptedException e) { break; }
         }
-        try {
-            fixedThreadPool.awaitTermination(Long.MAX_VALUE, TimeUnit.NANOSECONDS);
-        } catch (InterruptedException e) {
-            ServerApp.logger.log(Level.WARNING, e.toString());
-        }
-        stop();
     }
+
 
     /**
      * Stop the program
      */
-    private synchronized void stop() {
-        fixedThreadPool.shutdown();
-        collectionManager.saveCollection();
+    public synchronized void stop() {
+        shutdown(connectionPool);
+        shutdown(readPool);
+        shutdown(processPool);
+        shutdown(sendPool);
         server.disconnectFromClient();
         commandManager.clearHistory();
         serverIsRunning = false;
         server.clearSocket();
+        databaseHandler.closePool();
         ServerApp.logger.log(Level.INFO, "Server disconnected from client\nThe program was ended.");
     }
 
-
-
+    private void shutdown(ExecutorService es) {
+        es.shutdown();
+        try { es.awaitTermination(5, TimeUnit.SECONDS); }
+        catch (InterruptedException ex) { Thread.currentThread().interrupt(); }
+    }
 }
