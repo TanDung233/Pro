@@ -9,5 +9,6 @@ public enum ProgramCode implements Serializable {
     OK,
     ERROR,
     CLIENT_EXIT,
-    SERVER_EXIT;
+    SERVER_EXIT,
+    SERVER_ERROR;
 }

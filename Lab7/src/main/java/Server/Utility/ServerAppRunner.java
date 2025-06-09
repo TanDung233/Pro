@@ -67,7 +67,6 @@ public class ServerAppRunner implements Runnable{
         commandManager.clearHistory();
         serverIsRunning = false;
         server.clearSocket();
-        databaseHandler.closePool();
         ServerApp.logger.log(Level.INFO, "Server disconnected from client\nThe program was ended.");
     }
 

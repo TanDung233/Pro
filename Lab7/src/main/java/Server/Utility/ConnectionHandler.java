@@ -43,7 +43,7 @@ public class ConnectionHandler implements Runnable {
     public void run() {
         boolean alive = true;
         while (alive && !Thread.currentThread().isInterrupted()) {
-            Response resp = CompletableFuture
+            CompletableFuture<Response> future = CompletableFuture
                     .supplyAsync(server::receiveData, readPool)
 
                     .thenApplyAsync(bytes -> {
@@ -57,17 +57,23 @@ public class ConnectionHandler implements Runnable {
                     }, processPool)
 
                     .thenApplyAsync((Response rs) -> {
-                                byte[] bytes = SerializationUtils.serialize(rs);
-                                server.sendData(bytes);
-                                return rs;
-                            }, sendPool
-                    ).join();
+                        byte[] bytes = SerializationUtils.serialize(rs);
+                        server.sendData(bytes);
+                        return rs;
+                        }, sendPool)
+
+                    .exceptionally(throwable -> {
+                        ServerApp.logger.log(Level.WARNING, "Error in async pipeline", throwable);
+                        return new Response("Error in async ",ProgramCode.SERVER_ERROR);
+                });;
+
+            Response resp = future.join();
             ProgramCode code = resp.getResponseCode();
             if (code == ProgramCode.CLIENT_EXIT){
                 ServerApp.logger.log(Level.INFO, "Server disconnected from client");
                 server.disconnectFromClient();
             }
-            if (code == ProgramCode.SERVER_EXIT && code == ProgramCode.CLIENT_EXIT) {
+            if (code == ProgramCode.SERVER_EXIT) {
                 appRunner.stop();
                 alive = false;
             }
